@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Course Prerequisite Graph</title>
+
+  <!-- D3.js -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+
+      /* ---------------------------------------------------
+         NEW GRADIENT BACKGROUND
+      --------------------------------------------------- */
+
+      background:
+        linear-gradient(
+          135deg,
+          #0f172a 0%,
+          #0f766e 20%,
+          #0891b2 45%,
+          #2563eb 65%,
+          #6d28d9 85%,
+          #312e81 100%
+        );
+
+      background-attachment: fixed;
+    }
+
+    h1 {
+      text-align: center;
+      padding: 20px;
+      margin: 0;
+      background: rgba(15, 23, 42, 0.75);
+      color: white;
+      position: relative;
+      z-index: 5;
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+    }
+
+    .top-panel {
+      display: flex;
+      gap: 20px;
+      padding: 20px;
+      flex-wrap: wrap;
+      position: relative;
+      z-index: 5;
+
+      background: rgba(255,255,255,0.08);
+
+      backdrop-filter: blur(12px);
+
+      border-bottom: 1px solid rgba(255,255,255,0.12);
+
+      box-shadow:
+        0 10px 30px rgba(0,0,0,0.2);
+    }
+
+    .form-card {
+      background: rgba(255,255,255,0.15);
+
+      backdrop-filter: blur(10px);
+
+      padding: 16px;
+      border-radius: 16px;
+
+      box-shadow:
+        0 8px 24px rgba(0,0,0,0.25),
+        inset 0 1px 0 rgba(255,255,255,0.15);
+
+      min-width: 320px;
+
+      border:
+        1px solid rgba(255,255,255,0.15);
+
+      transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+    }
+
+    .form-card:hover {
+      transform: translateY(-3px);
+
+      box-shadow:
+        0 14px 30px rgba(0,0,0,0.35),
+        0 0 25px rgba(59,130,246,0.25);
+    }
+
+    .form-card h2 {
+      margin-top: 0;
+      font-size: 18px;
+      color: white;
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+      color: #dbeafe;
+      font-weight: bold;
+    }
+
+    input,
+    select,
+    button {
+      width: 100%;
+      padding: 10px;
+      box-sizing: border-box;
+      font-size: 14px;
+      border-radius: 8px;
+      border: none;
+    }
+
+    input,
+    select {
+      background: rgba(255,255,255,0.9);
+    }
+
+    button {
+      background:
+        linear-gradient(
+          135deg,
+          #2563eb,
+          #7c3aed
+        );
+
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+      margin-top: 5px;
+
+      transition:
+        transform 0.15s ease,
+        opacity 0.2s ease,
+        box-shadow 0.2s ease;
+
+      box-shadow:
+        0 6px 16px rgba(37,99,235,0.4);
+    }
+
+    button:hover {
+      opacity: 0.95;
+
+      transform: scale(1.02);
+
+      box-shadow:
+        0 8px 24px rgba(124,58,237,0.45);
+    }
+
+    /* ---------------------------------------------------
+       NEW SCROLLABLE GRAPH AREA
+    --------------------------------------------------- */
+
+    .graph-scroll-container {
+      height: calc(100vh - 260px);
+      overflow-y: auto;
+      overflow-x: auto;
+      position: relative;
+      z-index: 1;
+
+      scroll-behavior: smooth;
+
+      background:
+        rgba(255,255,255,0.04);
+
+      backdrop-filter: blur(4px);
+    }
+
+    .graph-scroll-container::-webkit-scrollbar {
+      width: 14px;
+      height: 14px;
+    }
+
+    .graph-scroll-container::-webkit-scrollbar-track {
+      background: rgba(255,255,255,0.08);
+      border-radius: 12px;
+    }
+
+    .graph-scroll-container::-webkit-scrollbar-thumb {
+      background:
+        linear-gradient(
+          180deg,
+          #06b6d4,
+          #2563eb,
+          #7c3aed
+        );
+
+      border-radius: 12px;
+      border: 2px solid rgba(255,255,255,0.1);
+    }
+
+    .graph-scroll-container::-webkit-scrollbar-thumb:hover {
+      background:
+        linear-gradient(
+          180deg,
+          #22d3ee,
+          #3b82f6,
+          #8b5cf6
+        );
+    }
+
+    svg {
+      width: 100%;
+      min-height: 1400px;
+
+      background:
+        radial-gradient(
+          circle at top left,
+          rgba(255,255,255,0.10),
+          rgba(255,255,255,0.02)
+        );
+
+      position: relative;
+      z-index: 1;
+    }
+
+    .course-node {
+      fill:
+        url(#courseGradient);
+
+      stroke: rgba(255,255,255,0.7);
+
+      stroke-width: 2px;
+
+      rx: 8px;
+      ry: 8px;
+
+      filter:
+        drop-shadow(0 4px 12px rgba(0,0,0,0.35));
+    }
+
+    .course-label {
+      fill: white;
+      font-size: 13px;
+      font-weight: bold;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      pointer-events: none;
+    }
+
+    .link {
+      fill: none;
+      stroke-width: 2.5px;
+
+      filter:
+        drop-shadow(0 0 4px rgba(255,255,255,0.25));
+    }
+
+    .prereq {
+      stroke: #e2e8f0;
+    }
+
+    .coreq {
+      stroke: #f472b6;
+      stroke-dasharray: 6 4;
+    }
+
+    .year-label {
+      font-size: 24px;
+      font-weight: bold;
+      fill: rgba(255,255,255,0.8);
+
+      filter:
+        drop-shadow(0 0 10px rgba(255,255,255,0.25));
+    }
+
+    .legend text {
+      font-size: 14px;
+      fill: white;
+    }
+
+    /* ---------------------------------------------------
+       GIF VISUALIZATION
+    --------------------------------------------------- */
+
+    .gif-container {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .flying-gif {
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      opacity: 0.85;
+      animation-timing-function: linear;
+      animation-iteration-count: infinite;
+
+      filter:
+        drop-shadow(0 0 8px rgba(255,255,255,0.8))
+        drop-shadow(0 0 20px rgba(59,130,246,0.7));
+    }
+
+    .gif1 {
+      animation: float1 18s linear infinite;
+    }
+
+    .gif2 {
+      animation: float2 24s linear infinite;
+    }
+
+    .gif3 {
+      animation: float3 20s linear infinite;
+    }
+
+    .gif4 {
+      animation: float4 28s linear infinite;
+    }
+
+    .gif5 {
+      animation: float5 22s linear infinite;
+    }
+
+    @keyframes float1 {
+      0% {
+        transform: translate(-150px, 50px) rotate(0deg) scale(0.8);
+      }
+      25% {
+        transform: translate(30vw, 20vh) rotate(120deg) scale(1.2);
+      }
+      50% {
+        transform: translate(60vw, 70vh) rotate(240deg) scale(0.9);
+      }
+      75% {
+        transform: translate(90vw, 30vh) rotate(360deg) scale(1.3);
+      }
+      100% {
+        transform: translate(120vw, 80vh) rotate(480deg) scale(0.8);
+      }
+    }
+
+    @keyframes float2 {
+      0% {
+        transform: translate(110vw, 10vh) rotate(0deg) scale(1);
+      }
+      20% {
+        transform: translate(80vw, 40vh) rotate(-90deg) scale(1.4);
+      }
+      40% {
+        transform: translate(50vw, 20vh) rotate(-180deg) scale(0.7);
+      }
+      60% {
+        transform: translate(20vw, 80vh) rotate(-270deg) scale(1.2);
+      }
+      100% {
+        transform: translate(-200px, 60vh) rotate(-360deg) scale(1);
+      }
+    }
+
+    @keyframes float3 {
+      0% {
+        transform: translate(20vw, -150px) rotate(0deg);
+      }
+      30% {
+        transform: translate(60vw, 30vh) rotate(180deg) scale(1.5);
+      }
+      60% {
+        transform: translate(10vw, 70vh) rotate(360deg) scale(0.8);
+      }
+      100% {
+        transform: translate(80vw, 110vh) rotate(540deg);
+      }
+    }
+
+    @keyframes float4 {
+      0% {
+        transform: translate(90vw, 110vh) rotate(0deg);
+      }
+      25% {
+        transform: translate(70vw, 60vh) rotate(90deg) scale(1.1);
+      }
+      50% {
+        transform: translate(40vw, 40vh) rotate(180deg) scale(1.4);
+      }
+      75% {
+        transform: translate(10vw, 20vh) rotate(270deg) scale(0.7);
+      }
+      100% {
+        transform: translate(-150px, -150px) rotate(360deg);
+      }
+    }
+
+    @keyframes float5 {
+      0% {
+        transform: translate(-200px, 80vh) rotate(0deg);
+      }
+      20% {
+        transform: translate(20vw, 50vh) rotate(100deg) scale(1.3);
+      }
+      40% {
+        transform: translate(50vw, 10vh) rotate(200deg) scale(0.9);
+      }
+      70% {
+        transform: translate(85vw, 60vh) rotate(320deg) scale(1.5);
+      }
+      100% {
+        transform: translate(120vw, 20vh) rotate(420deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- ---------------------------------------------------
+     GIF VISUALIZATION LAYER
+---------------------------------------------------- -->
+
+<div class="gif-container">
+  <img src="cap.gif" class="flying-gif gif1">
+  <img src="cap.gif" class="flying-gif gif2">
+  <img src="cap.gif" class="flying-gif gif3">
+  <img src="cap.gif" class="flying-gif gif4">
+  <img src="cap.gif" class="flying-gif gif5">
+</div>
+
+<h1>University Course Prerequisite Map</h1>
+
+<div class="top-panel">
+
+  <!-- Add Course Form -->
+  <div class="form-card">
+    <h2>Add Course</h2>
+
+    <div class="form-group">
+      <label>Course Code</label>
+      <input type="text" id="courseId" placeholder="CS401">
+    </div>
+
+    <div class="form-group">
+      <label>Year</label>
+      <select id="courseYear">
+        <option value="1">Year 1</option>
+        <option value="2">Year 2</option>
+        <option value="3">Year 3</option>
+        <option value="4">Year 4</option>
+      </select>
+    </div>
+
+    <button id="addCourseBtn">Add Course</button>
+  </div>
+
+  <!-- Add Relationship Form -->
+  <div class="form-card">
+    <h2>Add Relationship</h2>
+
+    <div class="form-group">
+      <label>Source Course</label>
+      <select id="sourceCourse"></select>
+    </div>
+
+    <div class="form-group">
+      <label>Target Course</label>
+      <select id="targetCourse"></select>
+    </div>
+
+    <div class="form-group">
+      <label>Relationship Type</label>
+      <select id="relationshipType">
+        <option value="prereq">Prerequisite</option>
+        <option value="coreq">Co-requisite</option>
+      </select>
+    </div>
+
+    <button id="addRelationshipBtn">Add Relationship</button>
+  </div>
+
+  <!-- Save / Load -->
+  <div class="form-card">
+    <h2>Save / Load Graph</h2>
+
+    <button id="saveGraphBtn">Save Graph To File</button>
+
+    <input
+      type="file"
+      id="loadGraphInput"
+      accept=".json"
+      style="margin-top:10px;"
+    >
+
+    <button id="loadApiBtn">
+      Load Graph From SQL API
+    </button>
+  </div>
+
+</div>
+
+<!-- ---------------------------------------------------
+     NEW SCROLL CONTAINER
+---------------------------------------------------- -->
+
+<div class="graph-scroll-container">
+  <svg id="graph"></svg>
+</div>
+
+<script>
+  /*
+    =====================================================
+    SQL / DATABASE PLACEHOLDER
+    =====================================================
+
+    Future example:
+
+    const response = await fetch("/api/graph");
+
+    const data = await response.json();
+
+    Expected JSON structure:
+
+    {
+      courses: [...],
+      links: [...]
+    }
+
+    Example SQL:
+
+    SELECT * FROM courses;
+    SELECT * FROM prerequisites;
+
+    prerequisites table might contain:
+    - source_course
+    - target_course
+    - relation_type ('prereq' or 'coreq')
+
+    =====================================================
+  */
+
+  // -----------------------------------------------------
+  // Dummy Data
+  // -----------------------------------------------------
+
+  const courses = [
+    { id: "MATH101", year: 1 },
+    { id: "CS101", year: 1 },
+    { id: "ENG101", year: 1 },
+    { id: "PHYS101", year: 1 },
+
+    { id: "MATH201", year: 2 },
+    { id: "CS201", year: 2 },
+    { id: "CS202", year: 2 },
+    { id: "STAT201", year: 2 },
+
+    { id: "CS301", year: 3 },
+    { id: "CS302", year: 3 },
+    { id: "AI301", year: 3 },
+    { id: "DB301", year: 3 }
+  ];
+
+  const links = [
+    { source: "MATH101", target: "MATH201", type: "prereq" },
+    { source: "CS101", target: "CS201", type: "prereq" },
+    { source: "CS101", target: "CS202", type: "prereq" },
+    { source: "MATH201", target: "AI301", type: "prereq" },
+    { source: "STAT201", target: "AI301", type: "coreq" }
+  ];
+
+  // -----------------------------------------------------
+  // SVG Setup
+  // -----------------------------------------------------
+
+  const svg = d3.select("#graph");
+
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  svg.attr("width", width)
+     .attr("height", 1400);
+
+  // -----------------------------------------------------
+  // NEW SVG GRADIENTS
+  // -----------------------------------------------------
+
+  const defs = svg.append("defs");
+
+  const courseGradient = defs.append("linearGradient")
+    .attr("id", "courseGradient")
+    .attr("x1", "0%")
+    .attr("y1", "0%")
+    .attr("x2", "100%")
+    .attr("y2", "100%");
+
+  courseGradient.append("stop")
+    .attr("offset", "0%")
+    .attr("stop-color", "#06b6d4");
+
+  courseGradient.append("stop")
+    .attr("offset", "50%")
+    .attr("stop-color", "#2563eb");
+
+  courseGradient.append("stop")
+    .attr("offset", "100%")
+    .attr("stop-color", "#7c3aed");
+
+  // -----------------------------------------------------
+  // Layout Configuration
+  // -----------------------------------------------------
+
+  const yearRows = {
+    1: 150,
+    2: 450,
+    3: 750,
+    4: 1050
+  };
+
+  const nodeWidth = 120;
+  const nodeHeight = 50;
+
+  // -----------------------------------------------------
+  // Arrow Definitions
+  // -----------------------------------------------------
+
+  defs.append("marker")
+    .attr("id", "arrow-prereq")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 10)
+    .attr("refY", 0)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto")
+    .append("path")
+    .attr("d", "M0,-5L10,0L0,5")
+    .attr("fill", "#e2e8f0");
+
+  defs.append("marker")
+    .attr("id", "arrow-coreq")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 10)
+    .attr("refY", 0)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto")
+    .append("path")
+    .attr("d", "M0,-5L10,0L0,5")
+    .attr("fill", "#f472b6");
+
+  // -----------------------------------------------------
+  // Rendering Function
+  // -----------------------------------------------------
+
+  function renderGraph() {
+
+    svg.selectAll(".dynamic").remove();
+
+    const groupedByYear = d3.group(courses, d => d.year);
+
+    groupedByYear.forEach((yearCourses, year) => {
+
+      const spacing = width / (yearCourses.length + 1);
+
+      yearCourses.forEach((course, index) => {
+        course.x = spacing * (index + 1);
+        course.y = yearRows[year];
+      });
+    });
+
+    const courseMap = new Map(courses.map(c => [c.id, c]));
+
+    Object.keys(yearRows).forEach(year => {
+
+      svg.append("text")
+        .attr("class", "year-label dynamic")
+        .attr("x", 40)
+        .attr("y", yearRows[year])
+        .text(`Year ${year}`);
+    });
+
+    svg.selectAll(".link.dynamic")
+      .data(links)
+      .enter()
+      .append("path")
+      .attr("class", d => `link dynamic ${d.type}`)
+      .attr("marker-end", d =>
+        d.type === "coreq"
+          ? "url(#arrow-coreq)"
+          : "url(#arrow-prereq)"
+      )
+      .attr("d", d => {
+
+        const source = courseMap.get(d.source);
+        const target = courseMap.get(d.target);
+
+        if (!source || !target) return "";
+
+        const startX = source.x;
+        const startY = source.y + nodeHeight / 2;
+
+        const endX = target.x;
+        const endY = target.y - nodeHeight / 2;
+
+        return `
+          M ${startX} ${startY}
+          C ${startX} ${(startY + endY) / 2},
+            ${endX} ${(startY + endY) / 2},
+            ${endX} ${endY}
+        `;
+      });
+
+    const nodeGroup = svg.selectAll(".node.dynamic")
+      .data(courses)
+      .enter()
+      .append("g")
+      .attr("class", "dynamic")
+      .attr("transform", d =>
+        `translate(${d.x - nodeWidth / 2}, ${d.y - nodeHeight / 2})`
+      );
+
+    nodeGroup.append("rect")
+      .attr("class", "course-node")
+      .attr("width", nodeWidth)
+      .attr("height", nodeHeight);
+
+    nodeGroup.append("text")
+      .attr("class", "course-label")
+      .attr("x", nodeWidth / 2)
+      .attr("y", nodeHeight / 2)
+      .text(d => d.id);
+
+    const legend = svg.append("g")
+      .attr("class", "legend dynamic")
+      .attr("transform", "translate(40, 40)");
+
+    legend.append("line")
+      .attr("x1", 0)
+      .attr("y1", 0)
+      .attr("x2", 40)
+      .attr("y2", 0)
+      .attr("stroke", "#e2e8f0")
+      .attr("stroke-width", 3);
+
+    legend.append("text")
+      .attr("x", 50)
+      .attr("y", 5)
+      .text("Prerequisite");
+
+    legend.append("line")
+      .attr("x1", 0)
+      .attr("y1", 30)
+      .attr("x2", 40)
+      .attr("y2", 30)
+      .attr("stroke", "#f472b6")
+      .attr("stroke-width", 3)
+      .attr("stroke-dasharray", "6 4");
+
+    legend.append("text")
+      .attr("x", 50)
+      .attr("y", 35)
+      .text("Co-requisite");
+  }
+
+  // -----------------------------------------------------
+  // Dropdown Refresh
+  // -----------------------------------------------------
+
+  function refreshCourseDropdowns() {
+
+    const sourceDropdown = document.getElementById("sourceCourse");
+    const targetDropdown = document.getElementById("targetCourse");
+
+    sourceDropdown.innerHTML = "";
+    targetDropdown.innerHTML = "";
+
+    courses.forEach(course => {
+
+      const option1 = document.createElement("option");
+      option1.value = course.id;
+      option1.textContent = course.id;
+
+      const option2 = document.createElement("option");
+      option2.value = course.id;
+      option2.textContent = course.id;
+
+      sourceDropdown.appendChild(option1);
+      targetDropdown.appendChild(option2);
+    });
+  }
+
+  // -----------------------------------------------------
+  // Add Course
+  // -----------------------------------------------------
+
+  document.getElementById("addCourseBtn")
+    .addEventListener("click", () => {
+
+      const courseId = document.getElementById("courseId").value.trim();
+      const courseYear = parseInt(document.getElementById("courseYear").value);
+
+      if (!courseId) {
+        alert("Enter course code");
+        return;
+      }
+
+      const exists = courses.find(c => c.id === courseId);
+
+      if (exists) {
+        alert("Course already exists");
+        return;
+      }
+
+      courses.push({
+        id: courseId,
+        year: courseYear
+      });
+
+      document.getElementById("courseId").value = "";
+
+      refreshCourseDropdowns();
+      renderGraph();
+    });
+
+  // -----------------------------------------------------
+  // Add Relationship
+  // -----------------------------------------------------
+
+  document.getElementById("addRelationshipBtn")
+    .addEventListener("click", () => {
+
+      const source = document.getElementById("sourceCourse").value;
+      const target = document.getElementById("targetCourse").value;
+      const type = document.getElementById("relationshipType").value;
+
+      if (source === target) {
+        alert("Source and target cannot be same");
+        return;
+      }
+
+      links.push({
+        source,
+        target,
+        type
+      });
+
+      renderGraph();
+    });
+
+  // -----------------------------------------------------
+  // SAVE GRAPH TO FILE
+  // -----------------------------------------------------
+
+  document.getElementById("saveGraphBtn")
+    .addEventListener("click", () => {
+
+      const graphData = {
+        courses,
+        links
+      };
+
+      const jsonString = JSON.stringify(graphData, null, 2);
+
+      const blob = new Blob(
+        [jsonString],
+        { type: "application/json" }
+      );
+
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+
+      a.href = url;
+      a.download = "course-graph.json";
+
+      document.body.appendChild(a);
+
+      a.click();
+
+      document.body.removeChild(a);
+
+      URL.revokeObjectURL(url);
+    });
+
+  // -----------------------------------------------------
+  // LOAD GRAPH FROM FILE
+  // -----------------------------------------------------
+
+  document.getElementById("loadGraphInput")
+    .addEventListener("change", (event) => {
+
+      const file = event.target.files[0];
+
+      if (!file) return;
+
+      const reader = new FileReader();
+
+      reader.onload = function(e) {
+
+        try {
+
+          const data = JSON.parse(e.target.result);
+
+          if (!data.courses || !data.links) {
+            alert("Invalid graph file");
+            return;
+          }
+
+          courses.length = 0;
+          links.length = 0;
+
+          data.courses.forEach(course => {
+            courses.push(course);
+          });
+
+          data.links.forEach(link => {
+            links.push(link);
+          });
+
+          refreshCourseDropdowns();
+          renderGraph();
+
+          alert("Graph loaded successfully");
+
+        } catch (err) {
+
+          console.error(err);
+          alert("Failed to load graph file");
+        }
+      };
+
+      reader.readAsText(file);
+    });
+
+  // -----------------------------------------------------
+  // LOAD GRAPH FROM SQL API
+  // -----------------------------------------------------
+
+  document.getElementById("loadApiBtn")
+    .addEventListener("click", async () => {
+
+      try {
+
+        const response = await fetch("/api/graph");
+
+        if (!response.ok) {
+          throw new Error("API request failed");
+        }
+
+        const data = await response.json();
+
+        if (!data.courses || !data.links) {
+          alert("Invalid API graph data");
+          return;
+        }
+
+        courses.length = 0;
+        links.length = 0;
+
+        data.courses.forEach(course => {
+          courses.push(course);
+        });
+
+        data.links.forEach(link => {
+          links.push(link);
+        });
+
+        refreshCourseDropdowns();
+        renderGraph();
+
+        alert("Graph loaded from API");
+
+      } catch (err) {
+
+        console.error(err);
+
+        alert(
+          "Could not load graph from API.\n\n" +
+          "Configure your SQL backend endpoint later."
+        );
+      }
+    });
+
+  // -----------------------------------------------------
+  // Initial Render
+  // -----------------------------------------------------
+
+  refreshCourseDropdowns();
+  renderGraph();
+
+</script>
+
+</body>
+</html>
